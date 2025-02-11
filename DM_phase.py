@@ -44,6 +44,7 @@ def _load_psrchive(fname):
         Sampling time, in s.
 
     """
+    import psrchive
     archive = psrchive.Archive_load(fname)
     archive.pscrunch()
     # un-dedisperse
@@ -62,6 +63,37 @@ def _load_psrchive(fname):
         / archive.get_nbin()
 
     if archive.get_bandwidth() < 0:
+        waterfall = np.flipud(waterfall)
+        f_channels = f_channels[::-1]
+
+    return waterfall, f_channels, t_res
+
+def _load_filfile(fname, samps_s, nsamps):
+    """Load data from a filterbank file.
+
+    Parameters
+    ----------
+    fname : str
+        Filterbank (.fil) to load.
+
+    Returns
+    -------
+    waterfall : array_like
+        Burst dynamic spectrum.
+    f_channels : array_like
+        Center frequencies, in MHz.
+    t_res : float
+        Sampling time, in s.
+
+    """
+    from sigpyproc.readers import FilReader
+    fil = FilReader(fname)
+
+    waterfall = fil.read_block(samps_s, nsamps)
+    t_res = fil.header.tsamp
+    f_channels = fil.header.chan_freqs
+
+    if fil.header.foff < 0:
         waterfall = np.flipud(waterfall)
         f_channels = f_channels[::-1]
 
@@ -842,10 +874,16 @@ def _dedisperse_waterfall(wfall, dm, freq, dt, ref_freq="top"):
     return dedisp
 
 
-def _init_dm(fname, dm_s, dm_e):
+def _init_dm(fname, dm_s, dm_e, dm=None):
     """Initialize DM limits of the search if not specified."""
-    archive = psrchive.Archive_load(fname)
-    dm = archive.get_dispersion_measure()
+    if fname.endswith(".ar"):
+        import psrchive
+        archive = psrchive.Archive_load(fname)
+        dm = archive.get_dispersion_measure()
+    else:
+        if dm is None:
+            raise RuntimeError("Please provide dm")
+
     if dm_s is None:
         dm_s = dm - 10
     if dm_e is None:
@@ -855,7 +893,8 @@ def _init_dm(fname, dm_s, dm_e):
 
 
 def from_PSRCHIVE(fname, dm_s, dm_e, dm_step, ref_freq="top",
-                  manual_cutoff=False, manual_bandwidth=False, no_plots=False):
+                  manual_cutoff=False, manual_bandwidth=False, 
+                  no_plots=False, dm=None, samp_s=None, nsamps=None):
     """Brute-force search of the dispersion measure of a single pulse
     stored into a PSRCHIVE file. The algorithm uses phase information
     and is robust to interference and unusual burst shapes.
@@ -870,6 +909,11 @@ def from_PSRCHIVE(fname, dm_s, dm_e, dm_step, ref_freq="top",
         Ending value of dispersion measure to search, in pc/cc.
     dm_step : float
         Step of the search, in pc/cc.
+
+    samp_s : int
+        Number of samples to seek to in the filterbank file
+    nsamps : int
+        Number of samples to extract from the filterbank file
 
     Returns
     -------
@@ -887,8 +931,13 @@ def from_PSRCHIVE(fname, dm_s, dm_e, dm_step, ref_freq="top",
         Measure.
 
     """
-    waterfall, f_channels, t_res = _load_psrchive(fname)
-    dm_s, dm_e = _init_dm(fname, dm_s, dm_e)
+    if fname.endswith(".ar"):
+        waterfall, f_channels, t_res = _load_psrchive(fname)
+        dm_s, dm_e = _init_dm(fname, dm_s, dm_e)
+    elif fname.endswith(".fil"):
+        waterfall, f_channels, t_res = _load_filfile(fname, samps_s, nsamps)
+        dm_s, dm_e = _init_dm(fname, dm_s, dm_e, dm_i)
+
     dm_list = np.arange(np.float(dm_s), np.float(dm_e), np.float(dm_step))
     dm, dm_std = get_dm(waterfall, dm_list, t_res, f_channels,
                         ref_freq=ref_freq, manual_cutoff=manual_cutoff,
@@ -1151,12 +1200,23 @@ def _get_parser():
         "-no_plots", help="Do not produce diagnostic plots.",
         action='store_true')
 
+    parser.add_argument(
+        "-dm_i", help="Initial DM (only used with filterbanks)",
+        type=float)
+
+    parser.add_argument(
+        "-samp_s", help="Number of samples to seek to in filfile",
+        type=int)
+
+    parser.add_argument(
+        "-nsamps", help="Number of samples to extract from filfile",
+        type=int)
+
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _get_parser()
-    import psrchive
     dm, dm_std = from_PSRCHIVE(
         args.fname,
         args.DM_s,
@@ -1165,5 +1225,8 @@ if __name__ == "__main__":
         ref_freq = args.ref_freq,
         manual_cutoff = args.manual_cutoff,
         manual_bandwidth = args.manual_bandwidth,
-        no_plots=args.no_plots
+        no_plots=args.no_plots,
+        dm_i = args.dm_i,
+        samps_s = args.samps_s,
+        nsamps = args.nsamps
     )
