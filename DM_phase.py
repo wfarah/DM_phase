@@ -68,7 +68,7 @@ def _load_psrchive(fname):
 
     return waterfall, f_channels, t_res
 
-def _load_filfile(fname, samps_s, nsamps):
+def _load_filfile(fname, samp_s, nsamps):
     """Load data from a filterbank file.
 
     Parameters
@@ -89,7 +89,7 @@ def _load_filfile(fname, samps_s, nsamps):
     from sigpyproc.readers import FilReader
     fil = FilReader(fname)
 
-    waterfall = fil.read_block(samps_s, nsamps)
+    waterfall = fil.read_block(samp_s, nsamps)
     t_res = fil.header.tsamp
     f_channels = fil.header.chan_freqs
 
@@ -749,8 +749,8 @@ def _check_window(profile, window):
         window += np.abs(peak_value - peak) / 2
         peak_value = (peak_value + peak) / 2
 
-    start = np.int(peak_value - np.round(1.25 * window))
-    end = np.int(peak_value + np.round(1.25 * window))
+    start = int(peak_value - np.round(1.25 * window))
+    end = int(peak_value + np.round(1.25 * window))
 
     if start < 0:
         start = 0
@@ -894,7 +894,7 @@ def _init_dm(fname, dm_s, dm_e, dm=None):
 
 def from_PSRCHIVE(fname, dm_s, dm_e, dm_step, ref_freq="top",
                   manual_cutoff=False, manual_bandwidth=False, 
-                  no_plots=False, dm=None, samp_s=None, nsamps=None):
+                  no_plots=False, dm_i=None, samp_s=None, nsamps=None):
     """Brute-force search of the dispersion measure of a single pulse
     stored into a PSRCHIVE file. The algorithm uses phase information
     and is robust to interference and unusual burst shapes.
@@ -935,10 +935,10 @@ def from_PSRCHIVE(fname, dm_s, dm_e, dm_step, ref_freq="top",
         waterfall, f_channels, t_res = _load_psrchive(fname)
         dm_s, dm_e = _init_dm(fname, dm_s, dm_e)
     elif fname.endswith(".fil"):
-        waterfall, f_channels, t_res = _load_filfile(fname, samps_s, nsamps)
+        waterfall, f_channels, t_res = _load_filfile(fname, samp_s, nsamps)
         dm_s, dm_e = _init_dm(fname, dm_s, dm_e, dm_i)
 
-    dm_list = np.arange(np.float(dm_s), np.float(dm_e), np.float(dm_step))
+    dm_list = np.arange(float(dm_s), float(dm_e), float(dm_step))
     dm, dm_std = get_dm(waterfall, dm_list, t_res, f_channels,
                         ref_freq=ref_freq, manual_cutoff=manual_cutoff,
                         manual_bandwidth=manual_bandwidth,
@@ -1227,6 +1227,6 @@ if __name__ == "__main__":
         manual_bandwidth = args.manual_bandwidth,
         no_plots=args.no_plots,
         dm_i = args.dm_i,
-        samps_s = args.samps_s,
+        samp_s = args.samp_s,
         nsamps = args.nsamps
     )
